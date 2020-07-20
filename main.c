@@ -3,7 +3,8 @@
 #include <string.h>
 
 const int MASTER = 0;
-const int BUFFER_SIZE = 100;
+const int BUFFER_SIZE = 150;
+const char* INPUT_FILENAME = "input.txt";
 
 // A utility function to find min of two integers 
 int min(int a, int b) 
@@ -17,43 +18,104 @@ int min3(int a, int b, int c)
 int max(int a, int b) 
 { return (a > b)? a: b; } 
 
+void print_lcs(int rows, int cols, char traceback[rows][cols], char *s1, int i, int j) {
+    if (i==0 || j==0) return;
+    switch(traceback[i][j]) {
+        case 0:
+            print_lcs(rows, cols, traceback, s1, i-1, j-1);
+            printf("%c", s1[i-1]);
+            break;
+        case 1:
+            print_lcs(rows, cols, traceback, s1, i, j-1);
+            break;
+        case 2:
+            print_lcs(rows, cols, traceback, s1, i-1, j);
+            break;
+    }
+}
+
+void print_info(int rows, int cols, char traceback[rows][cols], char *s1, char *s2, int lcs_length) {
+
+    printf("s1 = %s\n", s1);
+    printf("s2 = %s\n", s2);
+    printf("\n"); 
+
+    for (int i=0; i<rows; i++) { 
+        for (int j=0; j<cols; j++) {
+            switch (traceback[i][j]) {
+                case 0:
+                    printf("\u2b09");
+                    break;
+                case 1:
+                    printf("\u2190");
+                    break;
+                case 2:
+                    printf("\u2191");
+                    break;
+                default:
+                    printf("0");
+                    break;
+            }
+        }
+        printf("\n"); 
+    } 
+    printf("\n"); 
+    printf("longest common subsequence = ");
+    print_lcs(rows, cols, traceback, s1, rows-1, cols-1);
+    printf("\n"); 
+    printf("lcs length = %d\n", lcs_length); 
+}
+
 void sequential_lcs(char *s1, char *s2) {
-    int len_s1 = strlen(s1) + 1;
-    int len_s2 = strlen(s2) + 1;
+    int rows = strlen(s1) + 1;
+    int cols = strlen(s2) + 1;
 
-    int dp[len_s1][len_s2];
+    int dp[rows][cols];
+    char traceback[rows][cols];
 
-    for (int line=1; line<len_s1+len_s2; line++) {
-        int start_col =  max(0, line-len_s1); 
-        int count = min3(line, (len_s2-start_col), len_s1); 
+    for (int line=1; line<rows+cols; line++) {
+        int start_col =  max(0, line-rows); 
+        int count = min3(line, (cols-start_col), rows); 
   
         for (int j=0; j<count; j++) {
-            int row = min(len_s1, line)-j-1;
+            int row = min(rows, line)-j-1;
             int col = start_col+j;
 
-            if (row==0 || col==0)
+            if (row==0 || col==0) {
                 dp[row][col] = 0;
-            else if (s1[row - 1] == s2[col - 1]) 
+            }
+            else if (s1[row - 1] == s2[col - 1]) {
                 dp[row][col] = dp[row-1][col-1] + 1;
-            else 
-                dp[row][col] = max(dp[row][col-1], dp[row-1][col]);
+                traceback[row][col] = 0;
+            }
+            else {
+                dp[row][col] = max(dp[row][col-1], dp[row-1][col]); 
+                traceback[row][col] = dp[row][col-1] > dp[row-1][col] ? 1 : 2;
+            }
         }
     }
 
-    for (int i=0; i<len_s1; i++) 
+    // print_info(rows, cols, traceback, s1, s2, dp[rows-1][cols-1]);
+}
+
+void print_matrix(int rows, int cols, int matrix[rows][cols]) {
+    for (int i=0; i<rows; i++) 
     { 
-        for (int j=0; j<len_s2; j++) 
-            printf("%5d ", dp[i][j]); 
+        for (int j=0; j<cols; j++) 
+            printf("%3d ", matrix[i][j]); 
         printf("\n"); 
     } 
+    printf("\n"); 
 }
 
 int main(int argc, char** argv) {
 
-    char s1[BUFFER_SIZE], s2[BUFFER_SIZE];
-
-    strcpy(s1, "TAGTCACG");
-    strcpy(s2, "AGACTGTC");
+    // load inputs from file
+    FILE* file = fopen(INPUT_FILENAME, "r");
+    int len_s1, len_s2;
+    fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
+    char s1[len_s1+1], s2[len_s2+1];
+    fscanf(file, "%s\n%s\n", s1, s2);
 
     MPI_Init(NULL, NULL);
 
@@ -72,27 +134,29 @@ int main(int argc, char** argv) {
     printf("Hello world from processor %s, rank %d out of %d processors\n",
            processor_name, rank, size);
 
-    // Broadcast input strings to all processes
-	MPI_Bcast(s1, BUFFER_SIZE, MPI_CHAR, MASTER, MPI_COMM_WORLD);
-	MPI_Bcast(s2, BUFFER_SIZE, MPI_CHAR, MASTER, MPI_COMM_WORLD);
-
-    int len_s1 = strlen(s1) + 1;
-    int len_s2 = strlen(s2) + 1;
+    int rows = strlen(s1) + 1;
+    int cols = strlen(s2) + 1;
 
     int block_first, block_last, row, col;
     MPI_Status status;
     MPI_Request request1, request2;
     double start_time, finish_time, duration;
 
-    int dp[len_s1][len_s2];
+    if (rank == MASTER)
+        start_time = MPI_Wtime();
 
-    for(int i=0; i<len_s1; i++)
-        for(int j=0; j<len_s2; j++)
+    int dp[rows][cols];
+    char traceback[rows][cols];
+
+    for(int i=0; i<rows; i++)
+        for(int j=0; j<cols; j++) {
+            traceback[i][j] = -1;
             dp[i][j] = -1;
+        }
 
-    for (int line=1; line<len_s1+len_s2; line++) {
-        int start_col =  max(0, line-len_s1); 
-        int count = min3(line, (len_s2-start_col), len_s1); 
+    for (int line=1; line<rows+cols; line++) {
+        int start_col =  max(0, line-rows); 
+        int count = min3(line, (cols-start_col), rows); 
 
         int block_len = count / size;
         if (count % size)
@@ -102,50 +166,74 @@ int main(int argc, char** argv) {
         int end = block_len*(rank+1)-1;
   
         for (int j=start; j<=end && j<count; j++) {
-            row = min(len_s1, line)-j-1;
+            row = min(rows, line)-j-1;
             col = start_col+j;
 
-            if (row==0 || col==0)
+            if (row==0 || col==0) {
                 dp[row][col] = 0;
-            else if (s1[row - 1] == s2[col - 1]) 
+            }
+            else if (s1[row - 1] == s2[col - 1]) {
                 dp[row][col] = dp[row-1][col-1] + 1;
-            else 
+                traceback[row][col] = 0;
+            }
+            else {
                 dp[row][col] = max(dp[row][col-1], dp[row-1][col]); 
+                traceback[row][col] = dp[row][col-1] > dp[row-1][col] ? 1 : 2;
+            }
 
             if (j == start && rank > 0) {
-                // printf("line %d sending from %d to %d \n", line, rank, rank-1);
                 MPI_Send(&dp[row][col], 1, MPI_INT, rank-1, 1, MPI_COMM_WORLD);
             }
             if (j == end && rank < size-1) {
-                // printf("line %d sending from %d to %d \n", line, rank, rank+1);
                 MPI_Send(&dp[row][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD);
             }
         }
 
         int prev_index = start - 1;
         if (prev_index >= 0 && prev_index < count) {
-            row = min(len_s1, line)-prev_index-1;
+            row = min(rows, line)-prev_index-1;
             col = start_col+prev_index;
-            // printf("line %d receive from %d to %d \n", line, rank-1, rank);
             MPI_Recv(&dp[row][col], 1, MPI_INT, rank-1, 1, MPI_COMM_WORLD, &status);
         }
 
         int next_index = end + 1;
         if (next_index >= 0 && next_index < count) {
-            row = min(len_s1, line)-next_index-1;
+            row = min(rows, line)-next_index-1;
             col = start_col+next_index;
-            // printf("line %d receive from %d to %d \n", line, rank+1, rank);
             MPI_Recv(&dp[row][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD, &status);
         }
     }
 
-    if (rank == 0) {
-        for (int i=0; i<len_s1; i++) { 
-            for (int j=0; j<len_s2; j++) 
-                printf("%5d ", dp[i][j]); 
-            printf("\n"); 
-        } 
-        printf("\n"); 
+    if (rank == MASTER) {
+        for (int receive_from=0; receive_from<size; receive_from++) {
+            if (receive_from == MASTER) continue;
+            char buffer_traceback[rows][cols];
+            MPI_Recv(buffer_traceback, rows*cols, MPI_CHAR, receive_from, 1, MPI_COMM_WORLD, &status);
+
+            for (int i=0; i<rows; i++) {
+                for (int j=0; j<cols; j++) {
+                    if (buffer_traceback[i][j] != -1) {
+                        traceback[i][j] = buffer_traceback[i][j];
+                    }
+                }
+            }
+        }
+
+        printf("PARALLEL ALGORITHM\n");
+		finish_time = MPI_Wtime();
+		duration = finish_time - start_time;
+        print_info(rows, cols, traceback, s1, s2, dp[rows-1][cols-1]);
+        printf("Parallel completed in %f ms \n", duration*1000);
+
+        printf("\n\nSEQUENTIAL ALGORITHM\n");
+        start_time = MPI_Wtime();
+        sequential_lcs(s1, s2);
+        finish_time = MPI_Wtime();
+        duration = finish_time - start_time;
+        printf("Sequential completed in %f ms \n", duration*1000);
+    }
+    else {
+        MPI_Send(traceback, rows*cols, MPI_CHAR, MASTER, 1, MPI_COMM_WORLD);
     }
 
     MPI_Finalize();
