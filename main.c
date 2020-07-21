@@ -1,9 +1,10 @@
 #include <mpi.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
-const int MASTER = 1;
-const char* INPUT_FILENAME = "inputsmall.txt";
+const int MASTER = 0;
+const char* INPUT_FILENAME = "input50.txt";
 
 // A utility function to find min of two integers 
 int min(int a, int b) 
@@ -111,17 +112,6 @@ int sequential_lcs(char *s1, char *s2) {
 
 int main(int argc, char** argv) {
 
-    // load inputs from file
-    FILE* file = fopen(INPUT_FILENAME, "r");
-    int len_s1, len_s2;
-    fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
-    char s1[len_s1+1], s2[len_s2+1];
-    fscanf(file, "%s\n%s", s1, s2);
-
-    printf("s1 = %s\n", s1);
-    printf("s2 = %s\n", s2);
-    printf("\n"); 
-
     MPI_Init(NULL, NULL);
 
     // Get the number of processes
@@ -137,6 +127,19 @@ int main(int argc, char** argv) {
     MPI_Get_processor_name(processor_name, &name_len);
     printf("Hello world from processor %s, rank %d out of %d processors\n",
            processor_name, rank, size);
+
+    // load inputs from file
+    FILE* file = fopen(INPUT_FILENAME, "r");
+    int len_s1, len_s2;
+    fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
+    char s1[len_s1+1], s2[len_s2+1];
+    fscanf(file, "%s\n%s", s1, s2);
+
+    if (rank == MASTER) {
+        printf("s1 = %s\n", s1);
+        printf("s2 = %s\n", s2);
+        printf("\n"); 
+    }
 
     int rows = strlen(s1) + 1;
     int cols = strlen(s2) + 1;
@@ -155,18 +158,26 @@ int main(int argc, char** argv) {
         for(int j=0; j<cols; j++)
             dp[i][j] = -1;
 
-    for (int line=1; line<rows+cols; line++) {
+    for (int row=0; row<size-1; row++) {
+        for (int col=0; col<size-row-1; col++) {
+            if (row==0 || col==0)
+                dp[row][col] = 0;
+            else if (s1[row - 1] == s2[col - 1])
+                dp[row][col] = dp[row-1][col-1] + 1;
+            else
+                dp[row][col] = max(dp[row][col-1], dp[row-1][col]); 
+        }
+    }
+
+    for (int line=size; line<rows+cols-size; line++) {
         int start_col =  max(0, line-rows); 
         int count = min3(line, (cols-start_col), rows); 
 
-        int block_len = count / size;
-        if (count % size)
-            block_len++;
-
-        int start = block_len*rank;
-        int end = block_len*(rank+1)-1;
+        float block_len = (float)count / size;
+        int start = round(block_len*rank);
+        int end = round(block_len*(rank+1))-1;
   
-        for (int j=start; j<=end && j<count; j++) {
+        for (int j=start; j<=end; j++) {
             row = min(rows, line)-j-1;
             col = start_col+j;
 
@@ -208,6 +219,9 @@ int main(int argc, char** argv) {
             col = start_col+next_index;
             MPI_Recv(&dp[row][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD, &status);
         }
+
+        // if (rank == 1)
+        //     print_matrix(rows, cols, dp);
     }
 
     if (rank == MASTER) {
