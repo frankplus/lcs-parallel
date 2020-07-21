@@ -4,7 +4,7 @@
 #include <math.h>
 
 const int MASTER = 0;
-const char* INPUT_FILENAME = "input50.txt";
+const char* INPUT_FILENAME = "input1000.txt";
 
 // A utility function to find min of two integers 
 int min(int a, int b) 
@@ -105,7 +105,7 @@ int sequential_lcs(char *s1, char *s2) {
         }
     }
 
-    print_matrix(rows, cols, dp);
+    // print_matrix(rows, cols, dp);
     // print_traceback(rows, cols, traceback, s1, s2);
     return dp[rows-1][cols-1];
 }
@@ -154,28 +154,19 @@ int main(int argc, char** argv) {
 
     int dp[rows][cols];
 
-    for(int i=0; i<rows; i++)
-        for(int j=0; j<cols; j++)
-            dp[i][j] = -1;
-
-    for (int row=0; row<size-1; row++) {
-        for (int col=0; col<size-row-1; col++) {
-            if (row==0 || col==0)
-                dp[row][col] = 0;
-            else if (s1[row - 1] == s2[col - 1])
-                dp[row][col] = dp[row-1][col-1] + 1;
-            else
-                dp[row][col] = max(dp[row][col-1], dp[row-1][col]); 
-        }
-    }
-
-    for (int line=size; line<rows+cols-size; line++) {
+    for (int line=1; line<rows+cols; line++) {
         int start_col =  max(0, line-rows); 
         int count = min3(line, (cols-start_col), rows); 
 
-        float block_len = (float)count / size;
-        int start = round(block_len*rank);
-        int end = round(block_len*(rank+1))-1;
+        int start, end;
+        if (count <= size) {
+            start = rank;
+            end = min(rank, count-1);
+        } else {
+            float block_len = (float)count / size;
+            start = round(block_len*rank);
+            end = round(block_len*(rank+1))-1;
+        }
   
         for (int j=start; j<=end; j++) {
             row = min(rows, line)-j-1;
@@ -219,9 +210,6 @@ int main(int argc, char** argv) {
             col = start_col+next_index;
             MPI_Recv(&dp[row][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD, &status);
         }
-
-        // if (rank == 1)
-        //     print_matrix(rows, cols, dp);
     }
 
     if (rank == MASTER) {
@@ -230,7 +218,7 @@ int main(int argc, char** argv) {
         printf("\nPARALLEL ALGORITHM\n");
         printf("Parallel completed in %f ms \n", duration*1000);
         printf("Longest common subsequence length: %d \n", dp[rows-1][cols-1]);
-        print_matrix(rows, cols, dp);
+        // print_matrix(rows, cols, dp);
 
         printf("\n\nSEQUENTIAL ALGORITHM\n");
         start_time = MPI_Wtime();
