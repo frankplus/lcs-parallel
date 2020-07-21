@@ -110,82 +110,12 @@ int sequential_lcs(char *s1, char *s2) {
     return dp[rows-1][cols-1];
 }
 
-void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
+int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size) {
+    int rows = len_s1 + 1;
+    int cols = len_s2 + 1;
 
-    int len_s1, len_s2;
-    char *s1, *s2;
-    FILE* file;
-
-    if (rank == MASTER) {
-        file = fopen(filename, "r");
-        fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
-    }
-
-    MPI_Bcast(&len_s1, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&len_s2, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-
-    s1 = malloc(len_s1+1);
-    s2 = malloc(len_s2+1);
-
-    if (rank == MASTER) {
-        for(int i=0; i<len_s1; i++)
-            s1[i] = fgetc(file);
-        s1[len_s1] = '\0';
-        if (fgetc(file) != '\n') {
-            printf("error in input file format");
-            exit(1);
-        }
-        for(int i=0; i<len_s2; i++)
-            s2[i] = fgetc(file);
-        s2[len_s2] = '\0';
-    }
-
-    MPI_Bcast(&s1[0], len_s1, MPI_CHAR, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&s2[0], len_s2, MPI_CHAR, MASTER, MPI_COMM_WORLD);
-
-    *s1ptr = s1;
-    *s2ptr = s2;
-}
-
-int main(int argc, char** argv) {
-
-    MPI_Init(NULL, NULL);
-
-    // Get the number of processes
-    int size;
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    // Get the rank of the process
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
-    int name_len;
-    MPI_Get_processor_name(processor_name, &name_len);
-    printf("Hello world from processor %s, rank %d out of %d processors\n",
-           processor_name, rank, size);
-
-    char *s1, *s2;
-    load_input(argv[1], &s1, &s2, rank);
-
-    if (rank == MASTER) {
-        printf("s1 = %s\n", s1);
-        printf("s2 = %s\n", s2);
-        printf("s1 length: %lu characters\n", strlen(s1));
-        printf("s2 length: %lu characters\n", strlen(s2));
-        printf("\n"); 
-    }
-
-    int rows = strlen(s1) + 1;
-    int cols = strlen(s2) + 1;
-
-    int block_first, block_last, row, col;
+    int row, col;
     MPI_Status status;
-    MPI_Request request1, request2;
-    double start_time, finish_time, duration;
-
-    if (rank == MASTER)
-        start_time = MPI_Wtime();
 
     int dp[rows][cols];
 
@@ -247,12 +177,89 @@ int main(int argc, char** argv) {
         }
     }
 
+    return dp[rows-1][cols-1];
+}
+
+void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
+
+    int len_s1, len_s2;
+    char *s1, *s2;
+    FILE* file;
+
+    if (rank == MASTER) {
+        file = fopen(filename, "r");
+        fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
+    }
+
+    MPI_Bcast(&len_s1, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&len_s2, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+
+    s1 = malloc(len_s1+1);
+    s2 = malloc(len_s2+1);
+
+    if (rank == MASTER) {
+        for(int i=0; i<len_s1; i++)
+            s1[i] = fgetc(file);
+        s1[len_s1] = '\0';
+        if (fgetc(file) != '\n') {
+            printf("error in input file format");
+            exit(1);
+        }
+        for(int i=0; i<len_s2; i++)
+            s2[i] = fgetc(file);
+        s2[len_s2] = '\0';
+    }
+
+    MPI_Bcast(&s1[0], len_s1, MPI_CHAR, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&s2[0], len_s2, MPI_CHAR, MASTER, MPI_COMM_WORLD);
+
+    *s1ptr = s1;
+    *s2ptr = s2;
+}
+
+int main(int argc, char** argv) {
+
+    MPI_Init(NULL, NULL);
+
+    // Get the number of processes
+    int size;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // Get the rank of the process
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(processor_name, &name_len);
+    printf("Hello world from processor %s, rank %d out of %d processors\n",
+           processor_name, rank, size);
+
+    char *s1, *s2;
+    load_input(argv[1], &s1, &s2, rank);
+    int len_s1 = strlen(s1);
+    int len_s2 = strlen(s2);
+
+    if (rank == MASTER) {
+        printf("s1 = %s\n", s1);
+        printf("s2 = %s\n", s2);
+        printf("s1 length: %d characters\n", len_s1);
+        printf("s2 length: %d characters\n", len_s2);
+        printf("\n"); 
+    }
+
+    double start_time, finish_time, duration;
+    if (rank == MASTER)
+        start_time = MPI_Wtime();
+
+    int result = lcs_parallel(s1, s2, len_s1, len_s2, rank, size);
+
     if (rank == MASTER) {
 		finish_time = MPI_Wtime();
 		duration = finish_time - start_time;
         printf("\nPARALLEL ALGORITHM\n");
         printf("Parallel completed in %f ms \n", duration*1000);
-        printf("Longest common subsequence length: %d \n", dp[rows-1][cols-1]);
+        printf("Longest common subsequence length: %d \n", result);
         // print_matrix(rows, cols, dp);
 
         printf("\n\nSEQUENTIAL ALGORITHM\n");

@@ -1,0 +1,13 @@
+#! /bin/bash
+#@ job_name = mm_naive_4_4096
+#@ initialdir = ~/
+#@ input = /dev/null
+#@ output = $(job_name).out
+#@ error = $(job_name).err
+#@ class = short
+#@ job_type = parallel
+#@ blocking = unlimited
+#@ total_tasks = 4
+#@ queue
+
+./lcs input10000.txt
