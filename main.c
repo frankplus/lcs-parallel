@@ -2,9 +2,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <stdlib.h>
 
 const int MASTER = 0;
-const char* INPUT_FILENAME = "input1000.txt";
 
 // A utility function to find min of two integers 
 int min(int a, int b) 
@@ -110,6 +110,43 @@ int sequential_lcs(char *s1, char *s2) {
     return dp[rows-1][cols-1];
 }
 
+void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
+
+    int len_s1, len_s2;
+    char *s1, *s2;
+    FILE* file;
+
+    if (rank == MASTER) {
+        file = fopen(filename, "r");
+        fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
+    }
+
+    MPI_Bcast(&len_s1, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&len_s2, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+
+    s1 = malloc(len_s1+1);
+    s2 = malloc(len_s2+1);
+
+    if (rank == MASTER) {
+        for(int i=0; i<len_s1; i++)
+            s1[i] = fgetc(file);
+        s1[len_s1] = '\0';
+        if (fgetc(file) != '\n') {
+            printf("error in input file format");
+            exit(1);
+        }
+        for(int i=0; i<len_s2; i++)
+            s2[i] = fgetc(file);
+        s2[len_s2] = '\0';
+    }
+
+    MPI_Bcast(&s1[0], len_s1, MPI_CHAR, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&s2[0], len_s2, MPI_CHAR, MASTER, MPI_COMM_WORLD);
+
+    *s1ptr = s1;
+    *s2ptr = s2;
+}
+
 int main(int argc, char** argv) {
 
     MPI_Init(NULL, NULL);
@@ -128,16 +165,14 @@ int main(int argc, char** argv) {
     printf("Hello world from processor %s, rank %d out of %d processors\n",
            processor_name, rank, size);
 
-    // load inputs from file
-    FILE* file = fopen(INPUT_FILENAME, "r");
-    int len_s1, len_s2;
-    fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
-    char s1[len_s1+1], s2[len_s2+1];
-    fscanf(file, "%s\n%s", s1, s2);
+    char *s1, *s2;
+    load_input(argv[1], &s1, &s2, rank);
 
     if (rank == MASTER) {
         printf("s1 = %s\n", s1);
         printf("s2 = %s\n", s2);
+        printf("s1 length: %lu characters\n", strlen(s1));
+        printf("s2 length: %lu characters\n", strlen(s2));
         printf("\n"); 
     }
 
