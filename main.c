@@ -74,19 +74,19 @@ int sequential_lcs(char *s1, char *s2) {
     int rows = strlen(s1) + 1;
     int cols = strlen(s2) + 1;
 
-    int dp[3][min(rows, cols)];
-    char traceback[rows][cols];
-
-    for(int i=0; i<rows; i++)
-        for(int j=0; j<cols; j++)
-            traceback[i][j] = -1;
+    int dp[3][cols];
+    
+    // char traceback[rows][cols];
+    // for(int i=0; i<rows; i++)
+    //     for(int j=0; j<cols; j++)
+    //         traceback[i][j] = -1;
 
     for (int line=1; line<rows+cols; line++) {
         int curr_line = line % 3;
         int prev_line = (line-1) % 3;
         int prev_prev_line = (line-2) % 3;
 
-        int start_col =  max(0, line-rows); 
+        int start_col = max(0, line-rows); 
         int count = min3(line, (cols-start_col), rows); 
   
         for (int j=0; j<count; j++) {
@@ -99,23 +99,23 @@ int sequential_lcs(char *s1, char *s2) {
             else if (s1[row - 1] == s2[col - 1]) {
                 int upper_left = dp[prev_prev_line][col-1];
                 dp[curr_line][col] = upper_left + 1;
-                traceback[row][col] = 0;
+                // traceback[row][col] = 0;
             }
             else {
                 int left = dp[prev_line][col-1];
                 int up = dp[prev_line][col];
                 if (left > up) {
                     dp[curr_line][col] = left;
-                    traceback[row][col] = 1;
+                    // traceback[row][col] = 1;
                 } else {
                     dp[curr_line][col] = up;
-                    traceback[row][col] = 2;
+                    // traceback[row][col] = 2;
                 }
             }
         }
     }
 
-    print_traceback(rows, cols, traceback, s1, s2);
+    // print_traceback(rows, cols, traceback, s1, s2);
     return dp[(rows+cols-1) % 3][cols-1];
 }
 
@@ -126,9 +126,13 @@ int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size)
     int row, col;
     MPI_Status status;
 
-    int dp[rows][cols];
+    int dp[3][cols];
 
     for (int line=1; line<rows+cols; line++) {
+        int curr_line = line % 3;
+        int prev_line = (line-1) % 3;
+        int prev_prev_line = (line-2) % 3;
+
         int start_col =  max(0, line-rows); 
         int count = min3(line, (cols-start_col), rows); 
 
@@ -147,46 +151,40 @@ int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size)
             col = start_col+j;
 
             if (row==0 || col==0) {
-                dp[row][col] = 0;
+                dp[curr_line][col] = 0;
             }
             else if (s1[row - 1] == s2[col - 1]) {
-                if(dp[row-1][col-1] == -1)
-                    printf("ERROR row=%d col=%d rank=%d line=%d\n", row-1, col-1, rank, line);
-                dp[row][col] = dp[row-1][col-1] + 1;
+                int upper_left = dp[prev_prev_line][col-1];
+                dp[curr_line][col] = upper_left + 1;
             }
             else {
-                if(dp[row-1][col] == -1)
-                    printf("ERROR row=%d col=%d rank=%d line=%d\n", row-1, col, rank, line);
-                if(dp[row][col-1] == -1)
-                    printf("ERROR row=%d col=%d rank=%d line=%d\n", row, col-1, rank, line);
-
-                dp[row][col] = max(dp[row][col-1], dp[row-1][col]); 
+                int left = dp[prev_line][col-1];
+                int up = dp[prev_line][col];
+                dp[curr_line][col] = max(left, up);
             }
 
             if (j == start && rank > 0) {
-                MPI_Send(&dp[row][col], 1, MPI_INT, rank-1, 1, MPI_COMM_WORLD);
+                MPI_Send(&dp[curr_line][col], 1, MPI_INT, rank-1, 1, MPI_COMM_WORLD);
             }
             if (j == end && rank < size-1) {
-                MPI_Send(&dp[row][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD);
+                MPI_Send(&dp[curr_line][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD);
             }
         }
 
         int prev_index = start - 1;
         if (prev_index >= 0 && prev_index < count) {
-            row = min(rows, line)-prev_index-1;
             col = start_col+prev_index;
-            MPI_Recv(&dp[row][col], 1, MPI_INT, rank-1, 1, MPI_COMM_WORLD, &status);
+            MPI_Recv(&dp[curr_line][col], 1, MPI_INT, rank-1, 1, MPI_COMM_WORLD, &status);
         }
 
         int next_index = end + 1;
         if (next_index >= 0 && next_index < count) {
-            row = min(rows, line)-next_index-1;
             col = start_col+next_index;
-            MPI_Recv(&dp[row][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD, &status);
+            MPI_Recv(&dp[curr_line][col], 1, MPI_INT, rank+1, 1, MPI_COMM_WORLD, &status);
         }
     }
 
-    return dp[rows-1][cols-1];
+    return dp[(rows+cols-1) % 3][cols-1];
 }
 
 void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
@@ -261,23 +259,25 @@ int main(int argc, char** argv) {
     if (rank == MASTER)
         start_time = MPI_Wtime();
 
-    int result = lcs_parallel(s1, s2, len_s1, len_s2, rank, size);
+    int parallel_result = lcs_parallel(s1, s2, len_s1, len_s2, rank, size);
 
     if (rank == MASTER) {
 		finish_time = MPI_Wtime();
 		duration = finish_time - start_time;
         printf("\nPARALLEL ALGORITHM\n");
         printf("Parallel completed in %f ms \n", duration*1000);
-        printf("Longest common subsequence length: %d \n", result);
-        // print_matrix(rows, cols, dp);
+        printf("Longest common subsequence length: %d \n", parallel_result);
 
         printf("\n\nSEQUENTIAL ALGORITHM\n");
         start_time = MPI_Wtime();
-        int lcs_length = sequential_lcs(s1, s2);
+        int sequential_result = sequential_lcs(s1, s2);
         finish_time = MPI_Wtime();
         duration = finish_time - start_time;
         printf("Sequential completed in %f ms \n", duration*1000);
-        printf("Longest common subsequence length: %d \n", lcs_length);
+        printf("Longest common subsequence length: %d \n", sequential_result);
+
+        if (parallel_result != sequential_result)
+            printf("Ooops something went wrong");
     }
 
     MPI_Finalize();
