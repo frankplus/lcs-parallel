@@ -39,13 +39,13 @@ void print_traceback(int rows, int cols, char traceback[rows][cols], char *s1, c
         for (int j=0; j<cols; j++) {
             switch (traceback[i][j]) {
                 case 0:
-                    printf("\u2b09");
+                    printf("D");
                     break;
                 case 1:
-                    printf("\u2190");
+                    printf("L");
                     break;
                 case 2:
-                    printf("\u2191");
+                    printf("R");
                     break;
                 default:
                     printf("0");
@@ -74,16 +74,18 @@ int sequential_lcs(char *s1, char *s2) {
     int rows = strlen(s1) + 1;
     int cols = strlen(s2) + 1;
 
-    int dp[rows][cols];
+    int dp[3][min(rows, cols)];
     char traceback[rows][cols];
 
     for(int i=0; i<rows; i++)
-        for(int j=0; j<cols; j++) {
+        for(int j=0; j<cols; j++)
             traceback[i][j] = -1;
-            dp[i][j] = -1;
-        }
 
     for (int line=1; line<rows+cols; line++) {
+        int curr_line = line % 3;
+        int prev_line = (line-1) % 3;
+        int prev_prev_line = (line-2) % 3;
+
         int start_col =  max(0, line-rows); 
         int count = min3(line, (cols-start_col), rows); 
   
@@ -92,22 +94,29 @@ int sequential_lcs(char *s1, char *s2) {
             int col = start_col+j;
 
             if (row==0 || col==0) {
-                dp[row][col] = 0;
+                dp[curr_line][col] = 0;
             }
             else if (s1[row - 1] == s2[col - 1]) {
-                dp[row][col] = dp[row-1][col-1] + 1;
+                int upper_left = dp[prev_prev_line][col-1];
+                dp[curr_line][col] = upper_left + 1;
                 traceback[row][col] = 0;
             }
             else {
-                dp[row][col] = max(dp[row][col-1], dp[row-1][col]); 
-                traceback[row][col] = dp[row][col-1] > dp[row-1][col] ? 1 : 2;
+                int left = dp[prev_line][col-1];
+                int up = dp[prev_line][col];
+                if (left > up) {
+                    dp[curr_line][col] = left;
+                    traceback[row][col] = 1;
+                } else {
+                    dp[curr_line][col] = up;
+                    traceback[row][col] = 2;
+                }
             }
         }
     }
 
-    // print_matrix(rows, cols, dp);
-    // print_traceback(rows, cols, traceback, s1, s2);
-    return dp[rows-1][cols-1];
+    print_traceback(rows, cols, traceback, s1, s2);
+    return dp[(rows+cols-1) % 3][cols-1];
 }
 
 int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size) {

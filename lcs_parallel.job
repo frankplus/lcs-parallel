@@ -1,6 +1,6 @@
 #! /bin/bash
-#@ job_name = mm_naive_4_4096
-#@ initialdir = ~/
+#@ job_name = lcs_parallel
+#@ initialdir = ~/lcs_parallel/
 #@ input = /dev/null
 #@ output = $(job_name).out
 #@ error = $(job_name).err
