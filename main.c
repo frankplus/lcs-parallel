@@ -70,9 +70,9 @@ void print_matrix(int rows, int cols, int matrix[rows][cols]) {
     printf("\n"); 
 }
 
-int sequential_lcs(char *s1, char *s2) {
-    int rows = strlen(s1) + 1;
-    int cols = strlen(s2) + 1;
+int sequential_lcs(char *s1, char *s2, int len_s1, int len_s2) {
+    int rows = len_s1 + 1;
+    int cols = len_s2 + 1;
 
     int dp[3][cols];
     
@@ -270,7 +270,7 @@ int main(int argc, char** argv) {
 
         printf("\n\nSEQUENTIAL ALGORITHM\n");
         start_time = MPI_Wtime();
-        int sequential_result = sequential_lcs(s1, s2);
+        int sequential_result = sequential_lcs(s1, s2, len_s1, len_s2);
         finish_time = MPI_Wtime();
         duration = finish_time - start_time;
         printf("Sequential completed in %f ms \n", duration*1000);
