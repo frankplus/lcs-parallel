@@ -1,6 +1,6 @@
 import random
 
-dictionary = ['A','G','T','C']
+dictionary = ['A','C','G','T']
 sizes = [8,50,100,1000,10000,100000,1000000]
 
 def generate(size):

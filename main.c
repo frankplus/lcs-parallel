@@ -6,6 +6,13 @@
 
 const int MASTER = 0;
 
+void load_input(char *filename, char **s1ptr, char **s2ptr, int rank);
+int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size);
+int sequential_lcs(char *s1, char *s2, int len_s1, int len_s2);
+void print_lcs(int rows, int cols, char traceback[rows][cols], char *s1, int i, int j);
+void print_traceback(int rows, int cols, char traceback[rows][cols], char *s1, char *s2);
+void print_matrix(int rows, int cols, int matrix[rows][cols]);
+
 // A utility function to find min of two integers 
 int min(int a, int b) 
 { return (a < b)? a: b; } 
@@ -18,56 +25,100 @@ int min3(int a, int b, int c)
 int max(int a, int b) 
 { return (a > b)? a: b; } 
 
-void print_lcs(int rows, int cols, char traceback[rows][cols], char *s1, int i, int j) {
-    if (i==0 || j==0) return;
-    switch(traceback[i][j]) {
-        case 0:
-            print_lcs(rows, cols, traceback, s1, i-1, j-1);
-            printf("%c", s1[i-1]);
-            break;
-        case 1:
-            print_lcs(rows, cols, traceback, s1, i, j-1);
-            break;
-        case 2:
-            print_lcs(rows, cols, traceback, s1, i-1, j);
-            break;
+int main(int argc, char** argv) {
+
+    MPI_Init(NULL, NULL);
+
+    // Get the number of processes
+    int size;
+    MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+    // Get the rank of the process
+    int rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    char processor_name[MPI_MAX_PROCESSOR_NAME];
+    int name_len;
+    MPI_Get_processor_name(processor_name, &name_len);
+    printf("Hello world from processor %s, rank %d out of %d processors\n",
+           processor_name, rank, size);
+
+    char *s1, *s2;
+    load_input(argv[1], &s1, &s2, rank);
+    int len_s1 = strlen(s1);
+    int len_s2 = strlen(s2);
+
+    if (rank == MASTER) {
+        // printf("s1 = %s\n", s1);
+        // printf("s2 = %s\n", s2);
+        printf("s1 length: %d characters\n", len_s1);
+        printf("s2 length: %d characters\n", len_s2);
+        printf("\n"); 
     }
+
+    double start_time, finish_time, duration;
+    if (rank == MASTER)
+        start_time = MPI_Wtime();
+
+    int parallel_result = lcs_parallel(s1, s2, len_s1, len_s2, rank, size);
+
+    if (rank == MASTER) {
+		finish_time = MPI_Wtime();
+		duration = finish_time - start_time;
+        printf("\nPARALLEL ALGORITHM\n");
+        printf("Parallel completed in %f ms \n", duration*1000);
+        printf("Longest common subsequence length: %d \n", parallel_result);
+
+        printf("\n\nSEQUENTIAL ALGORITHM\n");
+        start_time = MPI_Wtime();
+        int sequential_result = sequential_lcs(s1, s2, len_s1, len_s2);
+        finish_time = MPI_Wtime();
+        duration = finish_time - start_time;
+        printf("Sequential completed in %f ms \n", duration*1000);
+        printf("Longest common subsequence length: %d \n", sequential_result);
+
+        if (parallel_result != sequential_result)
+            printf("Ooops something went wrong");
+    }
+
+    MPI_Finalize();
 }
 
-void print_traceback(int rows, int cols, char traceback[rows][cols], char *s1, char *s2) {
-    for (int i=0; i<rows; i++) { 
-        for (int j=0; j<cols; j++) {
-            switch (traceback[i][j]) {
-                case 0:
-                    printf("D");
-                    break;
-                case 1:
-                    printf("L");
-                    break;
-                case 2:
-                    printf("R");
-                    break;
-                default:
-                    printf("0");
-                    break;
-            }
+void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
+
+    int len_s1, len_s2;
+    char *s1, *s2;
+    FILE* file;
+
+    if (rank == MASTER) {
+        file = fopen(filename, "r");
+        fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
+    }
+
+    MPI_Bcast(&len_s1, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&len_s2, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
+
+    s1 = malloc(len_s1+1);
+    s2 = malloc(len_s2+1);
+
+    if (rank == MASTER) {
+        for(int i=0; i<len_s1; i++)
+            s1[i] = fgetc(file);
+        s1[len_s1] = '\0';
+        if (fgetc(file) != '\n') {
+            printf("error in input file format");
+            exit(1);
         }
-        printf("\n"); 
-    } 
-    printf("\n"); 
-    printf("longest common subsequence = ");
-    print_lcs(rows, cols, traceback, s1, rows-1, cols-1);
-    printf("\n"); 
-}
+        for(int i=0; i<len_s2; i++)
+            s2[i] = fgetc(file);
+        s2[len_s2] = '\0';
+    }
 
-void print_matrix(int rows, int cols, int matrix[rows][cols]) {
-    for (int i=0; i<rows; i++) 
-    { 
-        for (int j=0; j<cols; j++) 
-            printf("%2d ", matrix[i][j]); 
-        printf("\n"); 
-    } 
-    printf("\n"); 
+    MPI_Bcast(&s1[0], len_s1, MPI_CHAR, MASTER, MPI_COMM_WORLD);
+    MPI_Bcast(&s2[0], len_s2, MPI_CHAR, MASTER, MPI_COMM_WORLD);
+
+    *s1ptr = s1;
+    *s2ptr = s2;
 }
 
 int sequential_lcs(char *s1, char *s2, int len_s1, int len_s2) {
@@ -187,98 +238,54 @@ int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size)
     return dp[(rows+cols-1) % 3][cols-1];
 }
 
-void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
-
-    int len_s1, len_s2;
-    char *s1, *s2;
-    FILE* file;
-
-    if (rank == MASTER) {
-        file = fopen(filename, "r");
-        fscanf(file, "%d\n%d\n", &len_s1, &len_s2);
+void print_lcs(int rows, int cols, char traceback[rows][cols], char *s1, int i, int j) {
+    if (i==0 || j==0) return;
+    switch(traceback[i][j]) {
+        case 0:
+            print_lcs(rows, cols, traceback, s1, i-1, j-1);
+            printf("%c", s1[i-1]);
+            break;
+        case 1:
+            print_lcs(rows, cols, traceback, s1, i, j-1);
+            break;
+        case 2:
+            print_lcs(rows, cols, traceback, s1, i-1, j);
+            break;
     }
-
-    MPI_Bcast(&len_s1, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&len_s2, 1, MPI_INT, MASTER, MPI_COMM_WORLD);
-
-    s1 = malloc(len_s1+1);
-    s2 = malloc(len_s2+1);
-
-    if (rank == MASTER) {
-        for(int i=0; i<len_s1; i++)
-            s1[i] = fgetc(file);
-        s1[len_s1] = '\0';
-        if (fgetc(file) != '\n') {
-            printf("error in input file format");
-            exit(1);
-        }
-        for(int i=0; i<len_s2; i++)
-            s2[i] = fgetc(file);
-        s2[len_s2] = '\0';
-    }
-
-    MPI_Bcast(&s1[0], len_s1, MPI_CHAR, MASTER, MPI_COMM_WORLD);
-    MPI_Bcast(&s2[0], len_s2, MPI_CHAR, MASTER, MPI_COMM_WORLD);
-
-    *s1ptr = s1;
-    *s2ptr = s2;
 }
 
-int main(int argc, char** argv) {
-
-    MPI_Init(NULL, NULL);
-
-    // Get the number of processes
-    int size;
-    MPI_Comm_size(MPI_COMM_WORLD, &size);
-
-    // Get the rank of the process
-    int rank;
-    MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-
-    char processor_name[MPI_MAX_PROCESSOR_NAME];
-    int name_len;
-    MPI_Get_processor_name(processor_name, &name_len);
-    printf("Hello world from processor %s, rank %d out of %d processors\n",
-           processor_name, rank, size);
-
-    char *s1, *s2;
-    load_input(argv[1], &s1, &s2, rank);
-    int len_s1 = strlen(s1);
-    int len_s2 = strlen(s2);
-
-    if (rank == MASTER) {
-        printf("s1 = %s\n", s1);
-        printf("s2 = %s\n", s2);
-        printf("s1 length: %d characters\n", len_s1);
-        printf("s2 length: %d characters\n", len_s2);
+void print_traceback(int rows, int cols, char traceback[rows][cols], char *s1, char *s2) {
+    for (int i=0; i<rows; i++) { 
+        for (int j=0; j<cols; j++) {
+            switch (traceback[i][j]) {
+                case 0:
+                    printf("D");
+                    break;
+                case 1:
+                    printf("L");
+                    break;
+                case 2:
+                    printf("R");
+                    break;
+                default:
+                    printf("0");
+                    break;
+            }
+        }
         printf("\n"); 
-    }
+    } 
+    printf("\n"); 
+    printf("longest common subsequence = ");
+    print_lcs(rows, cols, traceback, s1, rows-1, cols-1);
+    printf("\n"); 
+}
 
-    double start_time, finish_time, duration;
-    if (rank == MASTER)
-        start_time = MPI_Wtime();
-
-    int parallel_result = lcs_parallel(s1, s2, len_s1, len_s2, rank, size);
-
-    if (rank == MASTER) {
-		finish_time = MPI_Wtime();
-		duration = finish_time - start_time;
-        printf("\nPARALLEL ALGORITHM\n");
-        printf("Parallel completed in %f ms \n", duration*1000);
-        printf("Longest common subsequence length: %d \n", parallel_result);
-
-        printf("\n\nSEQUENTIAL ALGORITHM\n");
-        start_time = MPI_Wtime();
-        int sequential_result = sequential_lcs(s1, s2, len_s1, len_s2);
-        finish_time = MPI_Wtime();
-        duration = finish_time - start_time;
-        printf("Sequential completed in %f ms \n", duration*1000);
-        printf("Longest common subsequence length: %d \n", sequential_result);
-
-        if (parallel_result != sequential_result)
-            printf("Ooops something went wrong");
-    }
-
-    MPI_Finalize();
+void print_matrix(int rows, int cols, int matrix[rows][cols]) {
+    for (int i=0; i<rows; i++) 
+    { 
+        for (int j=0; j<cols; j++) 
+            printf("%2d ", matrix[i][j]); 
+        printf("\n"); 
+    } 
+    printf("\n"); 
 }
