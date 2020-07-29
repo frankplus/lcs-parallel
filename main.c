@@ -84,6 +84,13 @@ int main(int argc, char** argv) {
     MPI_Finalize();
 }
 
+/**
+ * Load input strings from file
+ * @param filename Path to the input file 
+ * @param s1ptr Pointer of pointer to the first loaded input string
+ * @param s2ptr Pointer of pointer to the second loaded input string
+ * @param rank Rank of the calling process
+ */
 void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
 
     int len_s1, len_s2;
@@ -121,6 +128,14 @@ void load_input(char *filename, char **s1ptr, char **s2ptr, int rank) {
     *s2ptr = s2;
 }
 
+/**
+ * Compute the length of the longest common subsequence of two string. Sequential implementation.
+ * @param s1 The first string
+ * @param s2 The seconds string
+ * @param len_s1 Length of the first string
+ * @param len_s2 Length of the second string
+ * @return Length the longest common subsequence between the two input string
+ */
 int sequential_lcs(char *s1, char *s2, int len_s1, int len_s2) {
     int rows = len_s1 + 1;
     int cols = len_s2 + 1;
@@ -170,6 +185,16 @@ int sequential_lcs(char *s1, char *s2, int len_s1, int len_s2) {
     return dp[(rows+cols-1) % 3][cols-1];
 }
 
+/**
+ * Compute the length of the longest common subsequence of two string. Parallel implementation.
+ * @param s1 The first string
+ * @param s2 The seconds string
+ * @param len_s1 Length of the first string
+ * @param len_s2 Length of the second string
+ * @param rank Rank of the calling process
+ * @param size Total number of parallel processes
+ * @return Length the longest common subsequence between the two input string
+ */
 int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size) {
     int rows = len_s1 + 1;
     int cols = len_s2 + 1;
@@ -238,22 +263,14 @@ int lcs_parallel(char* s1, char *s2, int len_s1, int len_s2, int rank, int size)
     return dp[(rows+cols-1) % 3][cols-1];
 }
 
-void print_lcs(int rows, int cols, char traceback[rows][cols], char *s1, int i, int j) {
-    if (i==0 || j==0) return;
-    switch(traceback[i][j]) {
-        case 0:
-            print_lcs(rows, cols, traceback, s1, i-1, j-1);
-            printf("%c", s1[i-1]);
-            break;
-        case 1:
-            print_lcs(rows, cols, traceback, s1, i, j-1);
-            break;
-        case 2:
-            print_lcs(rows, cols, traceback, s1, i-1, j);
-            break;
-    }
-}
-
+/**
+ * Utility function to print the traceback table and the longest common subsequence
+ * @param rows Number of rows of the traceback table (same as DP table)
+ * @param cols Number of columns of the traceback table (same as DP table)
+ * @param traceback The traceback table
+ * @param s1 The first string
+ * @param s2 The seconds string
+ */
 void print_traceback(int rows, int cols, char traceback[rows][cols], char *s1, char *s2) {
     for (int i=0; i<rows; i++) { 
         for (int j=0; j<cols; j++) {
@@ -280,6 +297,37 @@ void print_traceback(int rows, int cols, char traceback[rows][cols], char *s1, c
     printf("\n"); 
 }
 
+/**
+ * Utility function to print the longest common subsequence given traceback matrix
+ * @param rows Number of rows of the traceback table (same as DP table)
+ * @param cols Number of columns of the traceback table (same as DP table)
+ * @param traceback The traceback table
+ * @param s1 One of the input strings
+ * @param i Current row
+ * @param j Current column
+ */
+void print_lcs(int rows, int cols, char traceback[rows][cols], char *s1, int i, int j) {
+    if (i==0 || j==0) return;
+    switch(traceback[i][j]) {
+        case 0:
+            print_lcs(rows, cols, traceback, s1, i-1, j-1);
+            printf("%c", s1[i-1]);
+            break;
+        case 1:
+            print_lcs(rows, cols, traceback, s1, i, j-1);
+            break;
+        case 2:
+            print_lcs(rows, cols, traceback, s1, i-1, j);
+            break;
+    }
+}
+
+/**
+ * Utility function to print any matrix
+ * @param rows Number of rows in the matrix
+ * @param cols Number of columns in the matrix
+ * @param matrix The matrix to print out
+ */
 void print_matrix(int rows, int cols, int matrix[rows][cols]) {
     for (int i=0; i<rows; i++) 
     { 

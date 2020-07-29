@@ -1,7 +1,7 @@
 import random
 
 dictionary = ['A','C','G','T']
-sizes = [8,50,100,1000,10000,100000,1000000]
+sizes = [8,50,100,1000,10000,100000,500000]
 
 def generate(size):
     res = ""
