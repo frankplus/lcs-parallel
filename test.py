@@ -1,13 +1,13 @@
 from math import ceil
-ROW = 50
-COL = 50
-SIZE = 6
+ROW = 15
+COL = 15
+SIZE = 4
 
 # Utility function to print a matrix 
 def printMatrix(matrix) : 
     for i in range(0, ROW) : 
         for j in range(0, COL) : 
-            print(matrix[i][j], end = "") 
+            print(matrix[i][j], end = " ") 
               
         print() 
   
